@@ -1,19 +1,26 @@
 compute_environment: LOCAL_MACHINE
 debug: false
+
 deepspeed_config:
-  deepspeed_multinode_launcher: standard
-  offload_optimizer_device: none
-  offload_param_device: none
+  zero_stage: 3
   zero3_init_flag: true
   zero3_save_16bit_model: true
-  zero_stage: 3
+  offload_optimizer_device: cpu
+  offload_param_device: cpu 
+  optimizer:
+    type: FusedAdam
+    params:
+      lr: 1e-5
+      betas: [0.9, 0.95]
+      eps: 1e-8
+
 distributed_type: DEEPSPEED
 downcast_bf16: 'no'
 machine_rank: 0
 main_training_function: main
 mixed_precision: bf16
 num_machines: 1
-num_processes: 8
+num_processes: 2  # number of GPUs in use
 rdzv_backend: static
 same_network: true
 tpu_env: []
