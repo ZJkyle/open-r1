@@ -18,55 +18,13 @@
 
 ## Overview
 
-The goal of this repo is to build the missing pieces of the R1 pipeline such that everybody can reproduce and build on top of it. The project is simple by design and mostly consists of:
-
-
-- `src/open_r1`: contains the scripts to train and evaluate models as well as generate synthetic data:
-    - `grpo.py`: trains a model with GRPO on a given dataset.
-    - `sft.py`: performs a simple SFT of a model on a dataset.
-    - `evaluate.py`: evaluates a model on the R1 benchmarks.
-    - `generate.py`: generates synthetic data from a model using [Distilabel](https://github.com/argilla-io/distilabel).
-- `Makefile`: contains easy-to-run commands for each step in the R1 pipeline leveraging the scripts above.
-
-### Plan of attack
-
-We will use the DeepSeek-R1 [tech report](https://github.com/deepseek-ai/DeepSeek-R1) as a guide, which can roughly be broken down into three main steps:
-
-* Step 1: replicate the R1-Distill models by distilling a high-quality corpus from DeepSeek-R1.
-* Step 2: replicate the pure RL pipeline that DeepSeek used to create R1-Zero. This will likely involve curating new, large-scale datasets for math, reasoning, and code.
-* Step 3: show we can go from base model to RL-tuned via multi-stage training.
-
-<center>
-    <img src="assets/plan-of-attack.png" width="500">
-</center>
-
-## News 🗞️
-
-* **⚡️ [2025/03/11] [(update #3)](https://huggingface.co/blog/open-r1/update-3):** We release the [**CodeForces-CoTs**](https://huggingface.co/datasets/open-r1/codeforces-cots) dataset of 10k competitive programming problems and 100k solutions distilled from R1. We also release IOI24: a new benchmark of _very_ hard problems from international olympiads. A 7B Qwen model trained on CodeForces-CoTs can outperform Claude 3.7 Sonnet on IOI24, while a 32B model can outperform R1 itself.
-* **∞ [2025/02/10] [(update #2)](https://huggingface.co/blog/open-r1/update-2):** We release the [**OpenR1-Math-220k**](https://huggingface.co/datasets/open-r1/OpenR1-Math-220k) dataset of 220k traces distilled from R1 on a new version of NuminaMath. Models trained on this dataset match the performance of DeepSeek's distilled ones.
-* **🔥 [2025/02/02] [(update #1)](https://huggingface.co/blog/open-r1/update-1):** We implement the first parts of the [training](https://github.com/huggingface/open-r1?tab=readme-ov-file#training-models), [inference](https://github.com/huggingface/open-r1?tab=readme-ov-file#data-generation), and [evaluation](https://github.com/huggingface/open-r1?tab=readme-ov-file#reproducing-deepseeks-evaluation-results) pipelines. Let's go!  
-
 ## Installation
-
-> [!CAUTION]
-> Libraries rely on CUDA 12.4. If you see errors related to segmentation faults, double check the version your system is running with `nvcc --version`.
-
-To run the code in this project, first, create a Python virtual environment using e.g. `uv`.
-To install `uv`, follow the [UV Installation Guide](https://docs.astral.sh/uv/getting-started/installation/).
-
-
-> [!NOTE]
-> As a shortcut, run `make install` to setup development libraries (spelled out below). Afterwards, if everything is setup correctly you can try out the Open-R1 models.
-
-
+```shell 
+docker-compose build
+```
 ```shell
 uv venv openr1 --python 3.11 && source openr1/bin/activate && uv pip install --upgrade pip
 ```
-
-> [!TIP]
-> For Hugging Face cluster users, add `export UV_LINK_MODE=copy` to your `.bashrc` to suppress cache warnings from `uv`
-
-Next, install vLLM and FlashAttention:
 
 ```shell
 uv pip install vllm==0.7.2
@@ -98,57 +56,6 @@ If it isn't installed, run:
 sudo apt-get install git-lfs
 ```
 
-## Training models
-
-We support training models with either DDP or DeepSpeed (ZeRO-2 and ZeRO-3). For example, to run SFT on a dataset distilled from DeepSeek-R1 with reasoning traces such as [open-r1/OpenR1-Math-220k](https://huggingface.co/datasets/open-r1/OpenR1-Math-220k), run:
-
-```shell
-# Train via command line
-accelerate launch --config_file=recipes/accelerate_configs/zero3.yaml src/open_r1/sft.py \
-    --model_name_or_path Qwen/Qwen2.5-1.5B-Instruct \
-    --dataset_name open-r1/OpenR1-Math-220k \
-    --learning_rate 1.0e-5 \
-    --num_train_epochs 1 \
-    --packing \
-    --max_seq_length 16384 \
-    --per_device_train_batch_size 16 \
-    --gradient_checkpointing \
-    --bf16 \
-    --output_dir data/Qwen2.5-1.5B-Open-R1-Distill
-
-# Train via YAML config
-accelerate launch --config_file recipes/accelerate_configs/zero3.yaml src/open_r1/sft.py \
-    --config recipes/Qwen2.5-1.5B-Instruct/sft/config_demo.yaml
-```
-
-Currently, the following tasks are supported:
-
-* Supervised Fine-Tuning `sft`
-* Group Relative Policy Optimization `grpo`
-
-> [!TIP]
-> If you scale up/down the number of GPUs, we recommend also scaling up the per-device batch size or number of gradient accumulation steps to keep the global batch size constant.
-
-By default, these scripts will push each model to your Hugging Face Hub username, i.e. `{username}/{model_name}-{task}`. You can override the parameters in each YAML config by appending them to the command as follows: 
-
-```shell
-# Change batch size, number of epochs etc
-accelerate launch --config_file recipes/accelerate_configs/zero3.yaml src/open_r1/sft.py \
-    --config recipes/Qwen2.5-1.5B-Instruct/sft/config_demo.yaml
-    --per_device_train_batch_size=1 --num_train_epochs=5
-```
-
-If you also wish to override the Weights and Biases default settings, you can do so as follows:
-
-```shell
-accelerate launch --config_file recipes/accelerate_configs/zero3.yaml src/open_r1/sft.py \
-    --config recipes/Qwen2.5-1.5B-Instruct/sft/config_demo.yaml
-    --wandb_entity huggingface --wandb_project open-r1 --run_name Qwen2.5-1.5B-GRPO
-```
-
-> [!NOTE]
-> The training commands below are configured for a node of 8 x H100s (80GB). For different hardware and topologies, you may need to tune the batch size and number of gradient accumulation steps.
-
 ### SFT
 
 To run SFT on a dataset distilled from DeepSeek-R1 with reasoning traces such as [open-r1/OpenR1-Math-220k](https://huggingface.co/datasets/open-r1/OpenR1-Math-220k), run:
@@ -157,67 +64,6 @@ To run SFT on a dataset distilled from DeepSeek-R1 with reasoning traces such as
 ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/zero3.yaml \
     src/open_r1/sft.py \
     --config recipes/Qwen2.5-1.5B-Instruct/sft/config_demo.yaml
-```
-
-### GRPO
-
-To train via the GRPO trainer, we use one GPU to run vLLM for faster generation and the remaining GPUs for training. For example, one a node with 8 GPUs, set `--num_processes` to override the default value in the `accelerate` configs:
-
-```shell
-ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/zero2.yaml \
-    --num_processes=7 src/open_r1/grpo.py \
-    --config recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/config_demo.yaml
-```
-
-> [!WARNING]
-> The chat template used in the distilled DeepSeek models omits the contents of the reasoning block within the `<think>` and `</think>` tags. It also prefills the assistant response with `<think>` which interferes with the format reward function. To handle that, it is important to override the chat template as done in e.g.  [recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/config_demo.yaml](./recipes/DeepSeek-R1-Distill-Qwen-1.5B/grpo/config_demo.yaml).
-
-
-We provide a minimal reproducible experiment using GRPO for mathematical reasoning, referencing the approach from [SimpleRL-Reason](https://hkust-nlp.notion.site/simplerl-reason) which uses a 7B model trained on 8K examples. Running this on 8 H100 80G GPU takes about 3 hours:
-
-```shell
-ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/zero2.yaml \
-    --num_processes=7 src/open_r1/grpo.py \
-    --config recipes/Qwen2.5-Math-7B/grpo/config_simple_rl.yaml
-```
-
-Our final [model](https://huggingface.co/Dongwei/Qwen-2.5-7B_Base_Math_smalllr), while using different learning rates, loss functions and reward structures, achieves 69.4% accuracy on MATH-500, demonstrating a 17%+ improvement over the base model.
-
-#### 👨‍💻 Training with a code interpreter
-
-We provide a `code` reward function for executing code generated by the policy during training. Currently, this reward function targets code contests like [Codeforces](https://codeforces.com), where solutions are executed against a set of test cases and the overall success rate is returned as the final reward. To ensure safe execution, we use [E2B](https://e2b.dev) sandboxes, which are fast and cheap to run. To use this reward function, first install the necessary dependencies:
-
-```shell
-uv pip install -e '.[code]'
-```
-
-Then create a `.env` file and place an API token from E2B within it:
-
-```
-E2B_API_KEY="e2b_xxx"
-```
-
-Then make sure your dataset contains a `verification_info` column with the following schema (adopted from PrimeIntellect's excellent [datasets](https://huggingface.co/collections/PrimeIntellect/synthetic-1-67a2c399cfdd6c9f7fae0c37) of verifiable problems):
-
-```python
-{
-    "language": "python",
-    "test_cases": [
-        {
-            "input": "4\n4\n0001\n1000\n0011\n0111\n3\n010\n101\n0\n2\n00000\n00001\n4\n01\n001\n0001\n00001\n",
-            "output": "1\n3 \n-1\n0\n\n2\n1 2 \n",
-            "type": "stdin_stdout",
-        }
-    ],
-}
-```
-
-For example, to train a smol model on Python problems, run:
-
-```shell
-ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_configs/zero2.yaml \
-    --num_processes=7 src/open_r1/grpo.py \
-    --config recipes/Qwen2.5-1.5B-Instruct/grpo/config_demo_code.yaml
 ```
 
 #### Data decontamination
