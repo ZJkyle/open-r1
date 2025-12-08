@@ -1,0 +1,49 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+
+# === VSCode / IDE ===
+.vscode/
+.idea/
+
+# === 虛擬環境 ===
+openr1_env/
+.env/
+.venv/
+
+# === 作業系統檔案 ===
+.DS_Store
+Thumbs.db
+
+# === Jupyter / NLTK / 開發資源 ===
+nltk_data/
+*.ipynb_checkpoints/
+
+# === Docker / Triton Cache ===
+.triton/
+.dockerignore
+
+# === Git / Shell 設定檔 ===
+.bash_history
+.bashrc
+.netrc
+.config/
+.nv/
+
+# === Submodules（如果沒要當作內部版本控）===
+llama.cpp/
+
+# === 其他你提到的 script ===
+evaluate_all.sh
+docker-compose.yml
+dockerfile
+push_to_hub.py
+data.py
+in.py
+wan.py
+requirements.txt
